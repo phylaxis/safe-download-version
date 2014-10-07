@@ -1,0 +1,106 @@
+set defsExist to "no"
+-- set os_version to do shell script "sw_vers -productVersion"
+-- TO DO: test for 10.5 and exit with message
+
+set thePListFolderPath to "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/"
+set thePListPath to thePListFolderPath & "Xprotect.meta.plist"
+
+tell application "Finder" to if exists thePListPath as POSIX file then set defsExist to "yes"
+
+if defsExist is equal to "yes" then
+	
+	tell application "System Events"
+		tell property list file thePListPath
+			tell contents
+				-- set theGMTDate to "Wed, 01 Jun 2011 21:19:15"
+				set theGMTDate to value of property list item "LastModification"
+				set theVersion to value of property list item "Version"
+			end tell
+		end tell
+	end tell
+	
+	if theGMTDate contains "GMT" then
+		-- Convert
+		-- Separate the GMT Date
+		set AppleScript's text item delimiters to space
+		set theDateItems to text items of theGMTDate
+		set AppleScript's text item delimiters to ""
+		set theDay to item 2 of theDateItems as integer
+		set theYear to item 4 of theDateItems as integer
+		set theMonth to item 3 of theDateItems
+		set theMonthList to {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+		repeat with a from 1 to length of theMonthList
+			if theMonth begins with (item a of theMonthList) then
+				set theMonth to a
+				exit repeat
+			end if
+		end repeat
+		
+		-- Separate the time
+		set theTime to item 5 of theDateItems
+		set AppleScript's text item delimiters to ":"
+		set theTimeItems to text items of theTime
+		set AppleScript's text item delimiters to ""
+		set theHours to item 1 of theTimeItems as integer
+		set theMinutes to item 2 of theTimeItems as integer
+		set theSeconds to item 3 of theTimeItems as integer
+		
+		-- Build an AppleScript date
+		set theASDate to current date
+		set day of theASDate to theDay
+		set month of theASDate to theMonth
+		set year of theASDate to theYear
+		set hours of theASDate to theHours
+		set minutes of theASDate to theMinutes
+		set seconds of theASDate to theSeconds
+		
+		-- Add the difference between the date and the seconds to GMT
+		set theASDate to theASDate + (time to GMT)
+	else
+		-- Use GMTDate
+		set theASDate to theGMTDate
+	end if
+	
+	set question to display dialog "Your OS X Safe Download definitions are currently at: Version " & theVersion & "
+
+The definitions were last updated by Apple on: 
+" & theASDate & "
+
+Note: Updating definitions will require admin login" buttons {"Update Definitions", "Quit"} default button 2
+	set answer to button returned of question
+	
+	if answer is equal to "Update Definitions" then
+		set updateResult to do shell script "/usr/libexec/XprotectUpdater" with administrator privileges
+		if updateResult is equal to "" then
+			tell application "System Events"
+				tell property list file thePListPath
+					tell contents
+						-- set theGMTDate to "Wed, 01 Jun 2011 21:19:15"
+						set newVersion to value of property list item "Version"
+					end tell
+				end tell
+			end tell
+			
+			if newVersion is equal to theVersion then
+				display alert "Looks like you already have the latest version.
+				
+You're currently at:
+Version " & newVersion
+			else
+				display alert "Updated!
+			
+Your OS X Safe Download definitions are now at:
+Version " & newVersion
+			end if
+		end if
+		return
+	else
+		return
+	end if
+else
+	display alert "We didn't find the OS X Safe Download definitions on your system. Please run Software Update."
+	
+end if
+
+-- Thanks to Ben at Automated Workflows, http://www.automatedworkflows.com
+-- for help with the GMT conversion scripting
